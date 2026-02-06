@@ -13,7 +13,7 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #1a0754 0%, #f34313 100%);
+            background: linear-gradient(135deg, #fb7dad 0%, #f1773a 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -422,32 +422,12 @@
         <div class="messages-feed" id="messagesFeed">
             <div class="empty-state">
                 <div class="empty-state-icon">📭</div>
-                <p>ยังไม่มีข้อความ<br>เป็นคนแรกที่โพสต์ข้อความไม่ระบุตัวตน!</p>
+                <p>ยังไม่มีข้อความ<br>เป็นคนแรกที่โพสต์ข้อความไม่ระบุตัวนตน!</p>
             </div>
         </div>
     </div>
 
-    <script type="module">
-        // Import Firebase SDKs
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-
-        // Firebase Configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBmsR9eevEkOIsR2afmw8OHhwIxdITGimI",
-            authDomain: "anonymous-messages-233e0.firebaseapp.com",
-            databaseURL: "https://anonymous-messages-233e0-default-rtdb.firebaseio.com",
-            projectId: "anonymous-messages-233e0",
-            storageBucket: "anonymous-messages-233e0.firebasestorage.app",
-            messagingSenderId: "199481033392",
-            appId: "1:199481033392:web:422a4f59b74b0f2a097175"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-        const messagesRef = ref(database, 'messages');
-
+    <script>
         const messageInput = document.getElementById('messageInput');
         const charCount = document.getElementById('charCount');
         const submitBtn = document.getElementById('submitBtn');
@@ -460,9 +440,11 @@
         let messages = [];
 
         const currentUrl = "https://66209010011.github.io/anonymous-web/";
+shareLinkInput.value = currentUrl;
+
         shareLinkInput.value = currentUrl;
 
-        // Copy link functionality
+        
         copyBtn.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(shareLinkInput.value);
@@ -486,46 +468,42 @@
             }
         });
 
-        // Load messages from Firebase in real-time
-        onValue(messagesRef, (snapshot) => {
-            messages = [];
-            snapshot.forEach((childSnapshot) => {
-                const msg = childSnapshot.val();
-                msg.firebaseKey = childSnapshot.key;
-                messages.push(msg);
-            });
-            
-            // Sort by timestamp (newest first)
-            messages.sort((a, b) => b.id - a.id);
-            
-            // Delete old messages (older than 24 hours)
-            deleteOldMessages();
-            
-            renderMessages();
-        });
-
-        // Delete messages older than 24 hours
-        function deleteOldMessages() {
-            const now = new Date();
-            const oneDayAgo = now - (24 * 60 * 60 * 1000);
-            
-            messages.forEach(msg => {
-                const messageTime = new Date(msg.timestamp);
-                if (messageTime < oneDayAgo && msg.firebaseKey) {
-                    const msgRef = ref(database, 'messages/' + msg.firebaseKey);
-                    remove(msgRef);
-                }
-            });
+        
+        function loadMessages() {
+            const saved = localStorage.getItem('anonymousMessages');
+            if (saved) {
+                messages = JSON.parse(saved);
+                deleteOldMessages();
+                renderMessages();
+            }
         }
 
-        // Character counter
+        
+        function deleteOldMessages() {
+            const now = new Date();
+            const oneDayAgo = now - (24 * 60 * 60 * 1000); 
+            
+            const originalLength = messages.length;
+            messages = messages.filter(msg => {
+                const messageTime = new Date(msg.timestamp);
+                return messageTime > oneDayAgo;
+            });
+            
+            if (messages.length !== originalLength) {
+                saveMessages();
+            }
+        }
+
+        function saveMessages() {
+            localStorage.setItem('anonymousMessages', JSON.stringify(messages));
+        }
+
         messageInput.addEventListener('input', () => {
             const length = messageInput.value.length;
             charCount.textContent = length;
             submitBtn.disabled = length === 0;
         });
 
-        // Submit message to Firebase
         submitBtn.addEventListener('click', () => {
             const content = messageInput.value.trim();
             
@@ -535,10 +513,12 @@
                     content: content,
                     timestamp: new Date().toISOString(),
                     avatar: getRandomEmoji(),
-                    comments: {}
+                    comments: []
                 };
 
-                push(messagesRef, newMessage);
+                messages.unshift(newMessage);
+                saveMessages();
+                renderMessages();
                 
                 messageInput.value = '';
                 charCount.textContent = '0';
@@ -584,9 +564,8 @@
             }
 
             messagesFeed.innerHTML = messages.map(msg => {
-                const comments = msg.comments ? Object.values(msg.comments) : [];
-                const commentsHtml = comments.length > 0 
-                    ? comments.map(comment => `
+                const commentsHtml = msg.comments && msg.comments.length > 0 
+                    ? msg.comments.map(comment => `
                         <div class="comment-item">
                             <div class="comment-header">
                                 <div class="comment-avatar">${comment.avatar}</div>
@@ -598,8 +577,8 @@
                     `).join('')
                     : '';
 
-                const commentCountText = comments.length > 0 
-                    ? `${comments.length} ความคิดเห็น` 
+                const commentCountText = msg.comments && msg.comments.length > 0 
+                    ? `${msg.comments.length} ความคิดเห็น` 
                     : 'ยังไม่มีความคิดเห็น';
 
                 return `
@@ -618,10 +597,10 @@
                                     type="text" 
                                     class="comment-input" 
                                     placeholder="เขียนความคิดเห็น (ไม่ระบุตัวตน)"
-                                    data-firebase-key="${msg.firebaseKey}"
+                                    data-message-id="${msg.id}"
                                     maxlength="300"
                                 >
-                                <button class="comment-btn" data-firebase-key="${msg.firebaseKey}">ส่ง</button>
+                                <button class="comment-btn" data-message-id="${msg.id}">ส่ง</button>
                             </div>
                             <div class="comment-count">${commentCountText}</div>
                             <div class="comments-list">
@@ -646,21 +625,28 @@
         }
 
         function handleCommentSubmit(e) {
-            const firebaseKey = e.target.dataset.firebaseKey;
-            const input = document.querySelector(`.comment-input[data-firebase-key="${firebaseKey}"]`);
+            const messageId = parseInt(e.target.dataset.messageId);
+            const input = document.querySelector(`.comment-input[data-message-id="${messageId}"]`);
             const commentText = input.value.trim();
 
-            if (commentText && firebaseKey) {
-                const newComment = {
-                    id: Date.now(),
-                    text: commentText,
-                    timestamp: new Date().toISOString(),
-                    avatar: getRandomEmoji()
-                };
+            if (commentText) {
+                const message = messages.find(m => m.id === messageId);
+                if (message) {
+                    if (!message.comments) {
+                        message.comments = [];
+                    }
 
-                const commentRef = ref(database, `messages/${firebaseKey}/comments`);
-                push(commentRef, newComment);
-                input.value = '';
+                    const newComment = {
+                        id: Date.now(),
+                        text: commentText,
+                        timestamp: new Date().toISOString(),
+                        avatar: getRandomEmoji()
+                    };
+
+                    message.comments.push(newComment);
+                    saveMessages();
+                    renderMessages();
+                }
             }
         }
 
@@ -670,11 +656,14 @@
             return div.innerHTML;
         }
 
-        // Auto-delete old messages every hour
         setInterval(() => {
             deleteOldMessages();
-        }, 3600000);
+            if (messages.length > 0) {
+                renderMessages();
+            }
+        }, 3600000); 
 
+        loadMessages();
         submitBtn.disabled = true;
     </script>
 </body>
